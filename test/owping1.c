@@ -149,7 +149,6 @@ int do_server(int s, void *context) {
 
 
     struct _setup_response setup_response;
-//    if(read(s, &setup_response, sizeof setup_response) != sizeof setup_response) {
     if(recv(s, &setup_response, sizeof setup_response, MSG_WAITALL) != sizeof setup_response) {
         perror("error reading setup response");
         return 0;
@@ -175,7 +174,6 @@ int do_server(int s, void *context) {
     }
 
     struct _request_session request_session;
-//    if (read(s, &request_session, sizeof request_session) != sizeof request_session) {
     if (recv(s, &request_session, sizeof request_session, MSG_WAITALL) != sizeof request_session) {
         perror("error reading request session message");
         return 0; 
@@ -194,15 +192,12 @@ int do_server(int s, void *context) {
     }
 
     struct _schedule_slot_description slots[NUM_TEST_SLOTS];
-//    if (read(s, slots, sizeof slots) != sizeof(slots)) {
     if (recv(s, slots, sizeof slots, MSG_WAITALL) != sizeof slots) {
         perror("error reading slot descriptions");
-//printf("read slot bytes: %lu bytes\n", ttt);
         return 0;
     }
 
     struct _hmac hmac;
-//    if (read(s, &hmac, sizeof hmac) != sizeof hmac) {
     if (recv(s, &hmac, sizeof hmac, MSG_WAITALL) != sizeof hmac) {
         perror("error reading hmac");
         return 0;
@@ -260,10 +255,10 @@ void *server_proc(void *context) {
  */
 int
 main(
-    int argc __attribute__((unused)),
-    char    **argv
-) {
-    
+        int argc __attribute__((unused)),
+        char    **argv
+    ) {
+
     int client_successful = 0;
     pthread_t server_thread;
     int thread_valid = 0;
@@ -358,13 +353,13 @@ main(
     OWPSID sid_ret;
     OWPErrSeverity err_ret;
     if (!OWPSessionRequest(
-            cntrl,
-            // not a real test, but these params run through the basic setup
-            I2AddrByNode(ctx->eh, "127.0.0.1"), True,
-            I2AddrByNode(ctx->eh, "127.0.0.1"), True,
-            &tspec,
-            NULL,
-            sid_ret, &err_ret)) {
+                cntrl,
+                // not a real test, but these params run through the basic setup
+                I2AddrByNode(ctx->eh, "127.0.0.1"), True,
+                I2AddrByNode(ctx->eh, "127.0.0.1"), True,
+                &tspec,
+                NULL,
+                sid_ret, &err_ret)) {
         goto cleanup;
     }
 
