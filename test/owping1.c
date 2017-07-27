@@ -31,119 +31,8 @@
 #define SERVER_TEST_IV "this is the IV!!"
 #define NUM_TEST_SLOTS 10
 #define NUM_TEST_PACKETS 19 
-#define SESSION_PORT 0xABCD
 #define SID_VALUE "this is the SID!"
 
-
-// used with do_server
-struct _server_test_results {
-    int sent_greeting;
-    int setup_response_ok;
-    int sent_server_start;
-    int sent_accept_session;
-    int test_complete;
-};
-
-
-/*
- * Function:        do_server
- *
- * Description:     emulates the server side of a test session
- *
- * In Args:         void pointer to struct _server_test_results
- *
- * Out Args:
- *
- * Scope:
- * Returns:          non-zero if the server should continue
- *                   accepting new clients
- * Side Effect:
- */
-int do_server(int s, void *context) {
-    struct _server_test_results *test_results
-        = (struct _server_test_results *) context;
-    memset(test_results, 0, sizeof(struct _server_test_results));
-
-    struct _greeting greeting;
-    memset(&greeting, 0, sizeof greeting);
-    *((uint32_t *) greeting.Modes) = htonl(7);
-    memset(greeting.Challenge, 0x55, sizeof greeting.Challenge);
-    memset(greeting.Salt, 0x78, sizeof greeting.Salt);
-    *((uint32_t *) greeting.Count) = htonl(1024);
-    test_results->sent_greeting 
-        = write(s, &greeting, sizeof greeting) == sizeof greeting;
-
-
-    struct _setup_response setup_response;
-    if(recv(s, &setup_response, sizeof setup_response, MSG_WAITALL) != sizeof setup_response) {
-        perror("error reading setup response");
-        return 0;
-    }
-
-    uint32_t mode = ntohl(*(uint32_t *) &setup_response.Mode);
-    if (mode != OWP_MODE_OPEN) {
-        printf("expected setup response mode == OWP_MODE_OPEN, got: 0x%08x", mode);
-        return 0;
-    }
-    // nothing to check in the other fields in unauthenticated mode
-    test_results->setup_response_ok = 1;
-
-    struct _server_start server_start;
-    memset(&server_start, 0, sizeof server_start);
-    server_start.StartTime = htonll(time(NULL));
-    memcpy(server_start.Server_IV, SERVER_TEST_IV, sizeof server_start.Server_IV);
-    test_results->sent_server_start
-        = write(s, &server_start, sizeof server_start) == sizeof server_start;
-    if (!test_results->sent_server_start) {
-        perror("error sending server start response");
-        return 0;
-    }
-
-    struct _request_session request_session;
-    if (recv(s, &request_session, sizeof request_session, MSG_WAITALL) != sizeof request_session) {
-        perror("error reading request session message");
-        return 0; 
-    }
-
-    uint32_t num_slots = ntohl(request_session.NumSlots);
-    if (num_slots != NUM_TEST_SLOTS) {
-        printf("expected %d test slots, got %d\n", NUM_TEST_SLOTS, num_slots);
-        return 0;
-    }
-
-    uint32_t num_packets = ntohl(request_session.NumPackets);
-    if (num_packets != NUM_TEST_PACKETS) {
-        printf("expected %d test packets, got %d\n", NUM_TEST_PACKETS, num_packets);
-        return 0;
-    }
-
-    struct _schedule_slot_description slots[NUM_TEST_SLOTS];
-    if (recv(s, slots, sizeof slots, MSG_WAITALL) != sizeof slots) {
-        perror("error reading slot descriptions");
-        return 0;
-    }
-
-    struct _hmac hmac;
-    if (recv(s, &hmac, sizeof hmac, MSG_WAITALL) != sizeof hmac) {
-        perror("error reading hmac");
-        return 0;
-    }
-
-    struct _accept_session accept_session;
-    memset(&accept_session, 0, sizeof accept_session);
-    memcpy(&accept_session.SID, SID_VALUE, sizeof accept_session.SID);
-    accept_session.Port = htons(SESSION_PORT);
-    if (write(s, &accept_session, sizeof accept_session) != sizeof accept_session) {
-        perror("error sending Accept-Session response");
-        return 0;
-    }
-
-    test_results->sent_accept_session = 1;
-
-    printf("do_server: finished!\n");
-    test_results->test_complete = 1;
-    return 0;
-}
 
 
 /*
@@ -169,7 +58,7 @@ void *server_proc(void *context) {
  * Function:        main
  *
  * Description:     launch a simulated owamp server & send commands
- *                  so they can be validated in do_server (above)
+ *                  so they can be validated in do_control_setup_server
  *
  * In Args:         argc, argv (unused)
  *
@@ -194,11 +83,17 @@ main(
     OWPTestSpec tspec;
     int fd = -1;
     struct _server_params server_params;
-    struct _server_test_results test_results;
+    struct _server_test_params test_results;
 
     memset(&tspec, 0, sizeof tspec);
     memset(&test_results, 0, sizeof test_results);
-    server_params.client_proc = do_server;
+    test_results.expected_num_test_slots = NUM_TEST_SLOTS;
+    test_results.expected_num_test_packets = NUM_TEST_PACKETS;
+    assert(sizeof test_results.server_iv <= sizeof SERVER_TEST_IV); // config sanity
+    assert(sizeof test_results.sid <= sizeof SID_VALUE); // configu sanity
+    memcpy(test_results.server_iv, SERVER_TEST_IV, sizeof test_results.server_iv);
+    memcpy(test_results.sid, SID_VALUE, sizeof test_results.sid);
+    server_params.client_proc = do_control_setup_server;
     server_params.test_context = &test_results;
 
     // create a tmp file to use as the unix socket
