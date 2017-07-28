@@ -48,7 +48,10 @@ struct _server_start {
 };
 
 // Request-Session message [RFC 4656 pg. 13]
+#pragma pack(push)
+#pragma pack(4) // StartTime & Timeout don't fall on dword boundaries
 struct _request_session {
+    // 00
     uint8_t CommandId;
     union {
         uint8_t MBZ: 4;
@@ -56,22 +59,48 @@ struct _request_session {
     } version;
     uint8_t ConfSender;
     uint8_t ConfReceiver;
+
+    // 04
     uint32_t NumSlots;
+
+    // 08
     uint32_t NumPackets;
+
+    // 12
     uint16_t SenderPort;
     uint16_t ReceiverPort;
+
+    // 16/20/24/28
     uint8_t SenderAddress[4];
     uint8_t SenderAddress1[12];
+
+    // 32/36/40/44
     uint8_t ReceiverAddress[4];
     uint8_t ReceiverAddress2[12];
+
+    // 48/52/56/60
     uint8_t SID[16];
+
+    // 64
     uint32_t PaddingLength;
+
+    // 68/72
     uint64_t StartTime;
+
+    // 76/80
     uint64_t Timeout;
+
+    // 84
     uint32_t TypeP;
+
+    // 88/92
     uint8_t MBZ2[8];
+
+    // 96/100/104/108
     uint8_t HMAC[16];
 };
+#pragma pack(pop)
+
 
 // schedule slot description format [RFC 4656 pg. 14]
 // these are sent following the Request-Session message
