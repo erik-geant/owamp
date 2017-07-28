@@ -146,13 +146,9 @@ struct _accept_session {
  */
 int do_control_setup_server(int s, void *context) {
 
-    struct _server_test_params *test_results
+    struct _server_test_params *test_context
         = (struct _server_test_params *) context;
-    test_results->sent_greeting
-        = test_results->setup_response_ok
-        = test_results->sent_server_start
-        = test_results->sent_accept_session
-        = test_results->test_complete = 0;
+    memset(&test_context->output, 0, sizeof test_context->output);
 
     struct _schedule_slot_description *slots = NULL;
 
@@ -162,7 +158,7 @@ int do_control_setup_server(int s, void *context) {
     memcpy(greeting.Challenge, CHALLENGE, sizeof greeting.Challenge);
     memcpy(greeting.Salt, SALT, sizeof greeting.Salt);
     greeting.Count = htonl(1024);
-    test_results->sent_greeting 
+    test_context->output.sent_greeting 
         = write(s, &greeting, sizeof greeting) == sizeof greeting;
 
     struct _setup_response setup_response;
@@ -172,22 +168,22 @@ int do_control_setup_server(int s, void *context) {
     }
 
     uint32_t mode = ntohl(setup_response.Mode);
-    if (mode != test_results->expected_modes) {
+    if (mode != test_context->input.expected_modes) {
         printf("expected setup response mode == 0x%08x, got: 0x%08x",
-            test_results->expected_modes, mode);
+            test_context->input.expected_modes, mode);
         goto cleanup;
     }
     // nothing to check in the other fields in unauthenticated mode
-    test_results->setup_response_ok = 1;
+    test_context->output.setup_response_ok = 1;
 
     struct _server_start server_start;
     memset(&server_start, 0, sizeof server_start);
     server_start.StartTime = htonll(time(NULL));
-    assert(sizeof server_start.Server_IV == sizeof test_results->server_iv); // config sanity
-    memcpy(server_start.Server_IV, test_results->server_iv, sizeof server_start.Server_IV);
-    test_results->sent_server_start
+    assert(sizeof server_start.Server_IV == sizeof test_context->input.server_iv); // config sanity
+    memcpy(server_start.Server_IV, test_context->input.server_iv, sizeof server_start.Server_IV);
+    test_context->output.sent_server_start
         = write(s, &server_start, sizeof server_start) == sizeof server_start;
-    if (!test_results->sent_server_start) {
+    if (!test_context->output.sent_server_start) {
         perror("error sending server start response");
         goto cleanup;
     }
@@ -199,16 +195,16 @@ int do_control_setup_server(int s, void *context) {
     }
 
     uint32_t num_slots = ntohl(request_session.NumSlots);
-    if (num_slots != test_results->expected_num_test_slots) {
+    if (num_slots != test_context->input.expected_num_test_slots) {
         printf("expected %d test slots, got %d\n",
-            test_results->expected_num_test_slots, num_slots);
+            test_context->input.expected_num_test_slots, num_slots);
         goto cleanup;
     }
 
     uint32_t num_packets = ntohl(request_session.NumPackets);
-    if (num_packets != test_results->expected_num_test_packets) {
+    if (num_packets != test_context->input.expected_num_test_packets) {
         printf("expected %d test packets, got %d\n",
-            test_results->expected_num_test_packets, num_packets);
+            test_context->input.expected_num_test_packets, num_packets);
         goto cleanup;
     }
 
@@ -230,18 +226,18 @@ int do_control_setup_server(int s, void *context) {
 
     struct _accept_session accept_session;
     memset(&accept_session, 0, sizeof accept_session);
-    assert(sizeof accept_session.SID <= sizeof test_results->sid); // config sanity
-    memcpy(&accept_session.SID, test_results->sid, sizeof accept_session.SID);
+    assert(sizeof accept_session.SID <= sizeof test_context->input.sid); // config sanity
+    memcpy(&accept_session.SID, test_context->input.sid, sizeof accept_session.SID);
     accept_session.Port = htons(SESSION_PORT);
     if (write(s, &accept_session, sizeof accept_session) != sizeof accept_session) {
         perror("error sending Accept-Session response");
         goto cleanup;
     }
 
-    test_results->sent_accept_session = 1;
+    test_context->output.sent_accept_session = 1;
 
     printf("do_server: finished!\n");
-    test_results->test_complete = 1;
+    test_context->output.test_complete = 1;
 
 cleanup:
     if (slots) {

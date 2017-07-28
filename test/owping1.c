@@ -83,19 +83,19 @@ main(
     OWPTestSpec tspec;
     int fd = -1;
     struct _server_params server_params;
-    struct _server_test_params test_results;
+    struct _server_test_params test_params;
 
     memset(&tspec, 0, sizeof tspec);
-    memset(&test_results, 0, sizeof test_results);
-    test_results.expected_modes = OWP_MODE_OPEN;
-    test_results.expected_num_test_slots = NUM_TEST_SLOTS;
-    test_results.expected_num_test_packets = NUM_TEST_PACKETS;
-    assert(sizeof test_results.server_iv <= sizeof SERVER_TEST_IV); // config sanity
-    assert(sizeof test_results.sid <= sizeof SID_VALUE); // configu sanity
-    memcpy(test_results.server_iv, SERVER_TEST_IV, sizeof test_results.server_iv);
-    memcpy(test_results.sid, SID_VALUE, sizeof test_results.sid);
+    memset(&test_params, 0, sizeof test_params);
+    test_params.input.expected_modes = OWP_MODE_OPEN;
+    test_params.input.expected_num_test_slots = NUM_TEST_SLOTS;
+    test_params.input.expected_num_test_packets = NUM_TEST_PACKETS;
+    assert(sizeof test_params.input.server_iv <= sizeof SERVER_TEST_IV); // config sanity
+    assert(sizeof test_params.input.sid <= sizeof SID_VALUE); // configu sanity
+    memcpy(test_params.input.server_iv, SERVER_TEST_IV, sizeof test_params.input.server_iv);
+    memcpy(test_params.input.sid, SID_VALUE, sizeof test_params.input.sid);
     server_params.client_proc = do_control_setup_server;
-    server_params.test_context = &test_results;
+    server_params.test_context = &test_params;
 
     // create a tmp file to use as the unix socket
     server_params.socket_path = (char *) malloc(sizeof TMP_SOCK_FILENAME_TPL + 1);
@@ -191,7 +191,7 @@ cleanup:
 
     if (thread_valid) {
         // possible, but unlikely race condition
-        if (test_results.test_complete) {
+        if (test_params.output.test_complete) {
             pthread_join(server_thread, NULL);
         } else {
             pthread_cancel(server_thread);
@@ -218,11 +218,11 @@ cleanup:
     }
 
     int exit_code = !client_successful
-        || !test_results.sent_greeting
-        || !test_results.setup_response_ok
-        || !test_results.sent_server_start
-        || !test_results.sent_accept_session
-        || !test_results.test_complete;
+        || !test_params.output.sent_greeting
+        || !test_params.output.setup_response_ok
+        || !test_params.output.sent_server_start
+        || !test_params.output.sent_accept_session
+        || !test_params.output.test_complete;
     exit(exit_code);
 }
 
