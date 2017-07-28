@@ -20,19 +20,22 @@
 
 #define SESSION_PORT 0xABCD // not verified 
 
+#define CHALLENGE "just a challenge"
+#define SALT "some funny saltT"
+
 // Greeting message [RFC 4656 pg. 6]
 struct _greeting {
     uint8_t Unused[12];
-    uint8_t Modes[4];
+    uint32_t Modes;
     uint8_t Challenge[16];
     uint8_t Salt[16];
-    uint8_t Count[4];
+    uint32_t Count;
     uint8_t MBZ[12];
 };
 
 // Set-Up-Response message [RFC 4656 pg. 7]
 struct _setup_response {
-    uint8_t Mode[4];
+    uint32_t Mode;
     uint8_t KeyID[80];
     uint8_t Token[64];
     uint8_t Client_IV[16];
@@ -155,10 +158,10 @@ int do_control_setup_server(int s, void *context) {
 
     struct _greeting greeting;
     memset(&greeting, 0, sizeof greeting);
-    *((uint32_t *) greeting.Modes) = htonl(7);
-    memset(greeting.Challenge, 0x55, sizeof greeting.Challenge);
-    memset(greeting.Salt, 0x78, sizeof greeting.Salt);
-    *((uint32_t *) greeting.Count) = htonl(1024);
+    greeting.Modes = htonl(7);
+    memcpy(greeting.Challenge, CHALLENGE, sizeof greeting.Challenge);
+    memcpy(greeting.Salt, SALT, sizeof greeting.Salt);
+    greeting.Count = htonl(1024);
     test_results->sent_greeting 
         = write(s, &greeting, sizeof greeting) == sizeof greeting;
 
@@ -168,7 +171,7 @@ int do_control_setup_server(int s, void *context) {
         goto cleanup;
     }
 
-    uint32_t mode = ntohl(*(uint32_t *) &setup_response.Mode);
+    uint32_t mode = ntohl(setup_response.Mode);
     if (mode != OWP_MODE_OPEN) {
         printf("expected setup response mode == OWP_MODE_OPEN, got: 0x%08x", mode);
         goto cleanup;
