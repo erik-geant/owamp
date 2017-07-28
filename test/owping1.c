@@ -87,6 +87,7 @@ main(
 
     memset(&tspec, 0, sizeof tspec);
     memset(&test_results, 0, sizeof test_results);
+    test_results.expected_modes = OWP_MODE_OPEN;
     test_results.expected_num_test_slots = NUM_TEST_SLOTS;
     test_results.expected_num_test_packets = NUM_TEST_PACKETS;
     assert(sizeof test_results.server_iv <= sizeof SERVER_TEST_IV); // config sanity

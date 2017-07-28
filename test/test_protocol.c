@@ -172,8 +172,9 @@ int do_control_setup_server(int s, void *context) {
     }
 
     uint32_t mode = ntohl(setup_response.Mode);
-    if (mode != OWP_MODE_OPEN) {
-        printf("expected setup response mode == OWP_MODE_OPEN, got: 0x%08x", mode);
+    if (mode != test_results->expected_modes) {
+        printf("expected setup response mode == 0x%08x, got: 0x%08x",
+            test_results->expected_modes, mode);
         goto cleanup;
     }
     // nothing to check in the other fields in unauthenticated mode
