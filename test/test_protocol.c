@@ -216,10 +216,12 @@ int do_control_setup_server(int s, void *context) {
         goto cleanup;
     }
 
-    struct _hmac hmac;
-    if (recv(s, &hmac, sizeof hmac, MSG_WAITALL) != sizeof hmac) {
-        perror("error reading hmac");
-        goto cleanup;
+    if (num_slots) {
+        struct _hmac hmac;
+        if (recv(s, &hmac, sizeof hmac, MSG_WAITALL) != sizeof hmac) {
+            perror("error reading hmac");
+            goto cleanup;
+        }
     }
 
     struct _accept_session accept_session;

@@ -21,7 +21,7 @@
 INCLUDES	= $(OWPINCS) $(I2UTILINCS)
 AM_CFLAGS	= $(OWP_PREFIX_CFLAGS)
 
-check_PROGRAMS  = owtvec owstats owping1 owe2e
+check_PROGRAMS  = owtvec owstats owping1 owe2e twping1
 TESTS           = $(check_PROGRAMS)
 
 owtvec_SOURCES	= owtvec.c
@@ -39,3 +39,7 @@ owping1_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 owe2e_SOURCES   = owe2e.c owtest_utils.c
 owe2e_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
 owe2e_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
+
+twping1_SOURCES   = twping1.c owtest_utils.c test_protocol.c
+twping1_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
+twping1_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
