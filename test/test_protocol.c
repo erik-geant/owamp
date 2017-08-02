@@ -395,13 +395,10 @@ int do_control_setup_server(int s, void *context) {
     memcpy(&accept_session.SID, test_context->input.sid, sizeof accept_session.SID);
     accept_session.Port = htons(SESSION_PORT);
 
-//    HMAC_Init_ex(&send_hmac_ctx, NULL, 0, NULL, NULL);
-    HMAC_Init_ex(&send_hmac_ctx,
-            clear_session_token.hmac_session_key, sizeof clear_session_token.hmac_session_key,
-            EVP_sha1(), NULL);
     HMAC_Update(&send_hmac_ctx, (unsigned char *) &accept_session, (sizeof accept_session) - 16);
     hmac_len = sizeof expected_hmac;
     HMAC_Final(&send_hmac_ctx, expected_hmac, &hmac_len);
+    HMAC_Init_ex(&send_hmac_ctx, NULL, 0, NULL, NULL);
     assert(hmac_len == 20);
     memcpy(accept_session.HMAC, expected_hmac, sizeof accept_session.HMAC);
     encrypt_outgoing(&accept_session, &accept_session, sizeof accept_session,
