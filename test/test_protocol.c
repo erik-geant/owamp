@@ -18,10 +18,20 @@
 #
 #include "./test_protocol.h"
 
-#define SESSION_PORT 0xABCD // not verified 
+//#include <I2util/util.h>
+#include <I2util/hmac-sha1.h>
+#include <I2util/pbkdf2.h>
+#include <openssl/aes.h>
+#include <openssl/hmac.h>
 
-#define CHALLENGE "just a challenge"
-#define SALT "some funny saltT"
+
+#define SESSION_PORT 0xABCD // not verified 
+#define GREETING_COUNT 1024
+#define GREETING_CHALLENGE "just a challenge"
+#define GREETING_SALT "some funny saltT"
+#define SERVER_TEST_IV "this is the IV!!"
+
+
 
 // Greeting message [RFC 4656 pg. 6]
 struct _greeting {
@@ -36,7 +46,7 @@ struct _greeting {
 // Set-Up-Response message [RFC 4656 pg. 7]
 struct _setup_response {
     uint32_t Mode;
-    uint8_t KeyID[80];
+    char KeyID[80];
     uint8_t Token[64];
     uint8_t Client_IV[16];
 };
@@ -116,7 +126,7 @@ struct _schedule_slot_description {
 // hmac sent following a sequence of schedule
 // slot descriptions
 struct _hmac {
-    uint8_t HMAC[16];
+    uint8_t hmac[16];
 };
 
 // Accept-Session message [RFC 4656 pg. 16]
@@ -127,6 +137,12 @@ struct _accept_session {
     uint8_t SID[16];
     uint8_t MBZ2[12];
     uint8_t HMAC[16];
+};
+
+struct _session_token {
+    uint8_t challenge[16];
+    uint8_t aes_session_key[16];
+    uint8_t hmac_session_key[32];
 };
 
 
@@ -144,6 +160,67 @@ struct _accept_session {
  *
  * Side Effect:
  */
+
+static void encrypt_outgoing(
+    void *input,
+    void *output, /* can overlap with input */
+    size_t message_size,
+    uint8_t key_bytes[16],
+    uint8_t iv_bytes[16] /* [in|out] */) {
+
+    assert(message_size % 16 == 0); // sanity (not a generic function)
+    if (message_size == 0) { return; }
+
+    AES_KEY key;
+    AES_set_encrypt_key(key_bytes, 128, &key);
+
+    void *output_tmp = malloc(message_size);
+    AES_cbc_encrypt(
+        input,
+        output_tmp,
+        message_size,
+        &key,
+        iv_bytes,
+        AES_ENCRYPT);
+
+    memcpy(output, output_tmp, message_size);
+    memcpy(iv_bytes, &output[message_size-16], 16);
+    free(output_tmp);
+}
+
+static void decrypt_incoming(
+    void *input,
+    void *output, /* can overlap with input */
+    size_t message_size,
+    uint8_t key_bytes[16],
+    uint8_t iv_bytes[16] /* [in|out] */) {
+
+    assert(message_size % 16 == 0); // sanity (not a generic function)
+    if (message_size == 0) { return; }
+
+    uint8_t next_iv[16];
+    memcpy(next_iv, &input[message_size-16], 16);
+
+    AES_KEY key;
+    AES_set_decrypt_key(key_bytes, 128, &key);
+
+    void *output_tmp = malloc(message_size);
+    AES_cbc_encrypt(
+        input,
+        output_tmp,
+        message_size,
+        &key,
+        iv_bytes,
+        AES_DECRYPT);
+
+    memcpy(output, output_tmp, message_size);
+    memcpy(iv_bytes, next_iv, 16);
+    free(output_tmp);
+}
+
+
+
+
 int do_control_setup_server(int s, void *context) {
 
     struct _server_test_params *test_context
@@ -152,12 +229,20 @@ int do_control_setup_server(int s, void *context) {
 
     struct _schedule_slot_description *slots = NULL;
 
+    HMAC_CTX send_hmac_ctx;
+    HMAC_CTX receive_hmac_ctx;
+    HMAC_CTX_init(&send_hmac_ctx);
+    HMAC_CTX_init(&receive_hmac_ctx);
+
+    uint8_t expected_hmac[20];
+    unsigned int hmac_len = sizeof expected_hmac;
+ 
     struct _greeting greeting;
     memset(&greeting, 0, sizeof greeting);
     greeting.Modes = htonl(7);
-    memcpy(greeting.Challenge, CHALLENGE, sizeof greeting.Challenge);
-    memcpy(greeting.Salt, SALT, sizeof greeting.Salt);
-    greeting.Count = htonl(1024);
+    memcpy(greeting.Challenge, GREETING_CHALLENGE, sizeof greeting.Challenge);
+    memcpy(greeting.Salt, GREETING_SALT, sizeof greeting.Salt);
+    greeting.Count = htonl(GREETING_COUNT);
     test_context->output.sent_greeting 
         = write(s, &greeting, sizeof greeting) == sizeof greeting;
 
@@ -167,20 +252,72 @@ int do_control_setup_server(int s, void *context) {
         goto cleanup;
     }
 
+
     uint32_t mode = ntohl(setup_response.Mode);
     if (mode != test_context->input.expected_modes) {
         printf("expected setup response mode == 0x%08x, got: 0x%08x",
             test_context->input.expected_modes, mode);
         goto cleanup;
     }
+    if (strcmp(setup_response.KeyID, SESSION_USERID)) {
+        printf("expected key id '%s', got '%s'\n",
+            SESSION_USERID, setup_response.KeyID);
+        goto cleanup;
+    }
+
+    uint8_t dk[16];
+    assert(strlen(GREETING_SALT) == 16); // _OWP_SALT_SIZE, config sanity
+    if( I2pbkdf2(
+            I2HMACSha1,
+            (uint32_t) I2SHA1_DIGEST_SIZE,
+            (uint8_t *) SESSION_PASSPHRASE,
+            strlen(SESSION_PASSPHRASE),
+            (uint8_t *) GREETING_SALT,
+            strlen(GREETING_SALT),
+            GREETING_COUNT,
+            sizeof(dk), dk) ) {
+        printf("error deriving token decryption key\n");
+        goto cleanup;
+    }
+
+    struct _session_token clear_session_token;
+    assert(sizeof clear_session_token == sizeof setup_response.Token); // config sanity
+
+    AES_KEY tk;
+    AES_set_decrypt_key(dk, 8 * sizeof(dk), &tk);
+    uint8_t iv[16];
+    memset(iv, 0, sizeof iv);
+    AES_cbc_encrypt(
+        setup_response.Token,
+        (void *) &clear_session_token,
+        sizeof setup_response.Token,
+        &tk, iv, AES_DECRYPT);
+
     // nothing to check in the other fields in unauthenticated mode
     test_context->output.setup_response_ok = 1;
+
+    uint8_t enc_session_iv[16];
+    uint8_t dec_session_iv[16];
+    memcpy(enc_session_iv, SERVER_TEST_IV, sizeof enc_session_iv);
+    memcpy(dec_session_iv, setup_response.Client_IV, sizeof dec_session_iv);
+
+    HMAC_Init_ex(&send_hmac_ctx,
+            clear_session_token.hmac_session_key, sizeof clear_session_token.hmac_session_key,
+            EVP_sha1(), NULL);
+    HMAC_Init_ex(&receive_hmac_ctx,
+            clear_session_token.hmac_session_key, sizeof clear_session_token.hmac_session_key,
+            EVP_sha1(), NULL);
+
 
     struct _server_start server_start;
     memset(&server_start, 0, sizeof server_start);
     server_start.StartTime = htonll(time(NULL));
-    assert(sizeof server_start.Server_IV == sizeof test_context->input.server_iv); // config sanity
-    memcpy(server_start.Server_IV, test_context->input.server_iv, sizeof server_start.Server_IV);
+    memcpy(server_start.Server_IV, SERVER_TEST_IV, sizeof server_start.Server_IV);
+
+    HMAC_Update(&send_hmac_ctx, (unsigned char *) &server_start.StartTime, 16);
+    encrypt_outgoing(&server_start.StartTime, &server_start.StartTime, 16,
+        clear_session_token.aes_session_key, enc_session_iv);
+
     test_context->output.sent_server_start
         = write(s, &server_start, sizeof server_start) == sizeof server_start;
     if (!test_context->output.sent_server_start) {
@@ -192,6 +329,17 @@ int do_control_setup_server(int s, void *context) {
     if (recv(s, &request_session, sizeof request_session, MSG_WAITALL) != sizeof request_session) {
         perror("error reading request session message");
         goto cleanup; 
+    }
+
+    decrypt_incoming(&request_session, &request_session, sizeof request_session,
+        clear_session_token.aes_session_key, dec_session_iv);
+    HMAC_Update(&receive_hmac_ctx, (unsigned char *) &request_session, (sizeof request_session) - 16);
+    hmac_len = sizeof expected_hmac;
+    HMAC_Final(&receive_hmac_ctx, expected_hmac, &hmac_len);
+    assert(hmac_len == 20);
+    if (memcmp(expected_hmac, request_session.HMAC, 16)) {
+        printf("hmac verification error in Request-Session\n");
+        goto cleanup;
     }
 
     uint32_t num_slots = ntohl(request_session.NumSlots);
@@ -208,18 +356,35 @@ int do_control_setup_server(int s, void *context) {
         goto cleanup;
     }
 
-    slots = (struct _schedule_slot_description *)
-        calloc(num_slots, sizeof(struct _schedule_slot_description));
-    size_t slots_num_bytes = num_slots * sizeof(struct _schedule_slot_description);
-    if (recv(s, slots, slots_num_bytes, MSG_WAITALL) != slots_num_bytes) {
-        perror("error reading slot descriptions");
-        goto cleanup;
-    }
-
     if (num_slots) {
+        slots = (struct _schedule_slot_description *)
+            calloc(num_slots, sizeof(struct _schedule_slot_description));
+        size_t slots_num_bytes = num_slots * sizeof(struct _schedule_slot_description);
+        if (recv(s, slots, slots_num_bytes, MSG_WAITALL) != slots_num_bytes) {
+            perror("error reading slot descriptions");
+            goto cleanup;
+        }
+
+        decrypt_incoming(slots, slots, slots_num_bytes,
+            clear_session_token.aes_session_key, dec_session_iv);
+
+        HMAC_Init_ex(&receive_hmac_ctx, NULL, 0, NULL, NULL);
+        HMAC_Update(&receive_hmac_ctx, (unsigned char *) slots, slots_num_bytes);
+        hmac_len = sizeof expected_hmac;
+        HMAC_Final(&receive_hmac_ctx, expected_hmac, &hmac_len);
+        assert(hmac_len == 20);
+
         struct _hmac hmac;
         if (recv(s, &hmac, sizeof hmac, MSG_WAITALL) != sizeof hmac) {
             perror("error reading hmac");
+            goto cleanup;
+        }
+
+        decrypt_incoming(&hmac, &hmac, sizeof hmac,
+            clear_session_token.aes_session_key, dec_session_iv);
+
+        if (memcmp(expected_hmac, hmac.hmac, 16)) {
+            printf("hmac verification error for Slot list\n");
             goto cleanup;
         }
     }
@@ -229,6 +394,19 @@ int do_control_setup_server(int s, void *context) {
     assert(sizeof accept_session.SID <= sizeof test_context->input.sid); // config sanity
     memcpy(&accept_session.SID, test_context->input.sid, sizeof accept_session.SID);
     accept_session.Port = htons(SESSION_PORT);
+
+//    HMAC_Init_ex(&send_hmac_ctx, NULL, 0, NULL, NULL);
+    HMAC_Init_ex(&send_hmac_ctx,
+            clear_session_token.hmac_session_key, sizeof clear_session_token.hmac_session_key,
+            EVP_sha1(), NULL);
+    HMAC_Update(&send_hmac_ctx, (unsigned char *) &accept_session, (sizeof accept_session) - 16);
+    hmac_len = sizeof expected_hmac;
+    HMAC_Final(&send_hmac_ctx, expected_hmac, &hmac_len);
+    assert(hmac_len == 20);
+    memcpy(accept_session.HMAC, expected_hmac, sizeof accept_session.HMAC);
+    encrypt_outgoing(&accept_session, &accept_session, sizeof accept_session,
+        clear_session_token.aes_session_key, enc_session_iv);
+
     if (write(s, &accept_session, sizeof accept_session) != sizeof accept_session) {
         perror("error sending Accept-Session response");
         goto cleanup;
@@ -243,6 +421,18 @@ cleanup:
     if (slots) {
         free(slots);
     }
+
+    HMAC_CTX_cleanup(&send_hmac_ctx);
+    HMAC_CTX_cleanup(&receive_hmac_ctx);
+
+#if 0
+    if (hmac_send_ctx) {
+        I2HMACSha1Free(hmac_send_ctx);
+    }
+    if (hmac_recv_ctx) {
+        I2HMACSha1Free(hmac_recv_ctx);
+    }
+#endif
 
     return 0;
 }

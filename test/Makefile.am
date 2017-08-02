@@ -41,5 +41,5 @@ owe2e_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
 owe2e_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
 twping1_SOURCES   = twping1.c owtest_utils.c test_protocol.c
-twping1_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
+twping1_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
 twping1_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
