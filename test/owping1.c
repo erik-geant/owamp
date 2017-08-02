@@ -28,7 +28,6 @@
 
 
 #define TMP_SOCK_FILENAME_TPL "owsock.XXXXXX"
-#define SERVER_TEST_IV "this is the IV!!"
 #define NUM_TEST_SLOTS 10
 #define NUM_TEST_PACKETS 19 
 #define SID_VALUE "this is the SID!"
@@ -90,9 +89,7 @@ main(
     test_params.input.expected_modes = OWP_MODE_OPEN;
     test_params.input.expected_num_test_slots = NUM_TEST_SLOTS;
     test_params.input.expected_num_test_packets = NUM_TEST_PACKETS;
-    assert(sizeof test_params.input.server_iv <= sizeof SERVER_TEST_IV); // config sanity
     assert(sizeof test_params.input.sid <= sizeof SID_VALUE); // configu sanity
-    memcpy(test_params.input.server_iv, SERVER_TEST_IV, sizeof test_params.input.server_iv);
     memcpy(test_params.input.sid, SID_VALUE, sizeof test_params.input.sid);
     server_params.client_proc = do_control_setup_server;
     server_params.test_context = &test_params;
@@ -151,12 +148,6 @@ main(
         printf("OWPControlOpen error\n");
         goto cleanup;
     }
-
-    if (memcmp(cntrl->readIV, SERVER_TEST_IV, 16)) {
-        printf("incorrect server iv received");
-        goto cleanup;
-    }
-
 
     OWPTimeStamp curr_time;
     OWPGetTimeOfDay(ctx, &curr_time);

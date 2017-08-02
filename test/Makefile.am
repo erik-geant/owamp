@@ -33,7 +33,7 @@ owstats_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS)
 owstats_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
 owping1_SOURCES   = owping1.c owtest_utils.c test_protocol.c
-owping1_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
+owping1_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
 owping1_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
 owe2e_SOURCES   = owe2e.c owtest_utils.c

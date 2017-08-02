@@ -285,10 +285,13 @@ int do_control_setup_server(int s, void *context) {
             test_context->input.expected_modes, mode);
         goto cleanup;
     }
-    if (strcmp(setup_response.KeyID, SESSION_USERID)) {
-        printf("expected key id '%s', got '%s'\n",
-            SESSION_USERID, setup_response.KeyID);
-        goto cleanup;
+
+    if (mode & (OWP_MODE_ENCRYPTED|OWP_MODE_AUTHENTICATED)) {
+            if (strcmp(setup_response.KeyID, SESSION_USERID)) {
+            printf("expected key id '%s', got '%s'\n",
+                    SESSION_USERID, setup_response.KeyID);
+            goto cleanup;
+            }
     }
 
     uint8_t dk[16];
@@ -308,21 +311,24 @@ int do_control_setup_server(int s, void *context) {
 
     struct _session_token clear_session_token;
     assert(sizeof clear_session_token == sizeof setup_response.Token); // config sanity
+    memset(&clear_session_token, 0, sizeof clear_session_token);
 
-    // decrypt the token
-    AES_KEY tk;
-    AES_set_decrypt_key(dk, 8 * sizeof(dk), &tk);
-    uint8_t iv[16];
-    memset(iv, 0, sizeof iv);
-    AES_cbc_encrypt(
-        setup_response.Token,
-        (void *) &clear_session_token,
-        sizeof setup_response.Token,
-        &tk, iv, AES_DECRYPT);
+    if (mode & (OWP_MODE_ENCRYPTED|OWP_MODE_AUTHENTICATED)) {
+        // decrypt the token
+        AES_KEY tk;
+        AES_set_decrypt_key(dk, 8 * sizeof(dk), &tk);
+        uint8_t iv[16];
+        memset(iv, 0, sizeof iv);
+        AES_cbc_encrypt(
+                setup_response.Token,
+                (void *) &clear_session_token,
+                sizeof setup_response.Token,
+                &tk, iv, AES_DECRYPT);
 
-    if (memcmp(clear_session_token.challenge, GREETING_CHALLENGE, sizeof clear_session_token.challenge)) {
-        printf("failed to validate challenge in decrypted token\n");
-        goto cleanup;
+        if (memcmp(clear_session_token.challenge, GREETING_CHALLENGE, sizeof clear_session_token.challenge)) {
+            printf("failed to validate challenge in decrypted token\n");
+            goto cleanup;
+        }
     }
 
 
@@ -348,8 +354,10 @@ int do_control_setup_server(int s, void *context) {
     memcpy(server_start.Server_IV, SERVER_TEST_IV, sizeof server_start.Server_IV);
 
     HMAC_Update(&send_hmac_ctx, (unsigned char *) &server_start.StartTime, 16);
-    encrypt_outgoing(&server_start.StartTime, &server_start.StartTime, 16,
-        clear_session_token.aes_session_key, enc_session_iv);
+    if (mode & OWP_MODE_ENCRYPTED) {
+        encrypt_outgoing(&server_start.StartTime, &server_start.StartTime, 16,
+                clear_session_token.aes_session_key, enc_session_iv);
+    }
 
     test_context->output.sent_server_start
         = write(s, &server_start, sizeof server_start) == sizeof server_start;
@@ -364,15 +372,19 @@ int do_control_setup_server(int s, void *context) {
         goto cleanup; 
     }
 
-    decrypt_incoming(&request_session, &request_session, sizeof request_session,
-        clear_session_token.aes_session_key, dec_session_iv);
+    if (mode & OWP_MODE_ENCRYPTED) {
+        decrypt_incoming(&request_session, &request_session, sizeof request_session,
+                clear_session_token.aes_session_key, dec_session_iv);
+    }
     HMAC_Update(&receive_hmac_ctx, (unsigned char *) &request_session, (sizeof request_session) - 16);
     hmac_len = sizeof expected_hmac;
     HMAC_Final(&receive_hmac_ctx, expected_hmac, &hmac_len);
     assert(hmac_len == 20);
-    if (memcmp(expected_hmac, request_session.HMAC, 16)) {
-        printf("hmac verification error in Request-Session\n");
-        goto cleanup;
+    if (mode & (OWP_MODE_ENCRYPTED|OWP_MODE_AUTHENTICATED)) {
+        if (memcmp(expected_hmac, request_session.HMAC, 16)) {
+            printf("hmac verification error in Request-Session\n");
+            goto cleanup;
+        }
     }
 
     uint32_t num_slots = ntohl(request_session.NumSlots);
@@ -398,8 +410,10 @@ int do_control_setup_server(int s, void *context) {
             goto cleanup;
         }
 
-        decrypt_incoming(slots, slots, slots_num_bytes,
-            clear_session_token.aes_session_key, dec_session_iv);
+        if (mode & (OWP_MODE_ENCRYPTED|OWP_MODE_AUTHENTICATED)) {
+            decrypt_incoming(slots, slots, slots_num_bytes,
+                    clear_session_token.aes_session_key, dec_session_iv);
+        }
 
         HMAC_Init_ex(&receive_hmac_ctx, NULL, 0, NULL, NULL);
         HMAC_Update(&receive_hmac_ctx, (unsigned char *) slots, slots_num_bytes);
@@ -413,12 +427,16 @@ int do_control_setup_server(int s, void *context) {
             goto cleanup;
         }
 
-        decrypt_incoming(&hmac, &hmac, sizeof hmac,
-            clear_session_token.aes_session_key, dec_session_iv);
+        if (mode & OWP_MODE_ENCRYPTED) {
+            decrypt_incoming(&hmac, &hmac, sizeof hmac,
+                    clear_session_token.aes_session_key, dec_session_iv);
+        }
 
-        if (memcmp(expected_hmac, hmac.hmac, 16)) {
-            printf("hmac verification error for Slot list\n");
-            goto cleanup;
+        if (mode & (OWP_MODE_ENCRYPTED|OWP_MODE_AUTHENTICATED)) {
+            if (memcmp(expected_hmac, hmac.hmac, 16)) {
+                printf("hmac verification error for Slot list\n");
+                goto cleanup;
+            }
         }
     }
 
@@ -431,11 +449,13 @@ int do_control_setup_server(int s, void *context) {
     HMAC_Update(&send_hmac_ctx, (unsigned char *) &accept_session, (sizeof accept_session) - 16);
     hmac_len = sizeof expected_hmac;
     HMAC_Final(&send_hmac_ctx, expected_hmac, &hmac_len);
-    HMAC_Init_ex(&send_hmac_ctx, NULL, 0, NULL, NULL);
     assert(hmac_len == 20);
     memcpy(accept_session.HMAC, expected_hmac, sizeof accept_session.HMAC);
-    encrypt_outgoing(&accept_session, &accept_session, sizeof accept_session,
-        clear_session_token.aes_session_key, enc_session_iv);
+    HMAC_Init_ex(&send_hmac_ctx, NULL, 0, NULL, NULL); // reset in case we continue
+    if (mode & OWP_MODE_ENCRYPTED) {
+        encrypt_outgoing(&accept_session, &accept_session, sizeof accept_session,
+                clear_session_token.aes_session_key, enc_session_iv);
+    }
 
     if (write(s, &accept_session, sizeof accept_session) != sizeof accept_session) {
         perror("error sending Accept-Session response");
@@ -457,6 +477,4 @@ cleanup:
 
     return 0;
 }
-
-
 
