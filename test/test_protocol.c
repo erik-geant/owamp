@@ -147,6 +147,93 @@ struct _session_token {
 
 
 /*
+ * Function:        encrypt_outgoing
+ *
+ * Description:     wrapper used below for aes/cbc encrypting output using a
+ *                  fresh temporary context, clear/cipher buffers can overlap
+ *
+ * In Args:
+ *
+ * Out Args:
+ *
+ * Scope:
+ * Returns:         iv for the next cbc cipher
+ *
+ * Side Effect:     asserts if message_size % 16 != 0
+ */
+static void encrypt_outgoing(
+    void *clear,
+    void *cipher, /* can overlap with clear */
+    size_t message_size,
+    uint8_t key_bytes[16],
+    uint8_t iv_bytes[16] /* [in|out] */) {
+
+    assert(message_size % 16 == 0); // sanity (not a generic function)
+    if (message_size == 0) { return; }
+
+    AES_KEY key;
+    AES_set_encrypt_key(key_bytes, 128, &key);
+
+    void *output_tmp = malloc(message_size);
+    AES_cbc_encrypt(
+        clear,
+        output_tmp,
+        message_size,
+        &key,
+        iv_bytes,
+        AES_ENCRYPT);
+
+    memcpy(cipher, output_tmp, message_size);
+    memcpy(iv_bytes, &cipher[message_size-16], 16);
+    free(output_tmp);
+}
+
+/*
+ * Function:        decrypt_outgoing
+ *
+ * Description:     wrapper used below for aes/cbc decrypting input using a
+ *                  fresh temporary context, clear/cipher buffers can overlap
+ *
+ * In Args:
+ *
+ * Out Args:
+ *
+ * Scope:
+ * Returns:         iv for the next cbc cipher
+ *
+ * Side Effect:     asserts if message_size % 16 != 0
+ */
+static void decrypt_incoming(
+    void *cipher,
+    void *clear, /* can overlap with cipher */
+    size_t message_size,
+    uint8_t key_bytes[16],
+    uint8_t iv_bytes[16] /* [in|out] */) {
+
+    assert(message_size % 16 == 0); // sanity (not a generic function)
+    if (message_size == 0) { return; }
+
+    uint8_t next_iv[16];
+    memcpy(next_iv, &cipher[message_size-16], 16);
+
+    AES_KEY key;
+    AES_set_decrypt_key(key_bytes, 128, &key);
+
+    void *output_tmp = malloc(message_size);
+    AES_cbc_encrypt(
+        cipher,
+        output_tmp,
+        message_size,
+        &key,
+        iv_bytes,
+        AES_DECRYPT);
+
+    memcpy(clear, output_tmp, message_size);
+    memcpy(iv_bytes, next_iv, 16);
+    free(output_tmp);
+}
+
+/*
  * Function:        do_control_setup_server
  *
  * Description:     emulates the server side of the test control protocol 
@@ -160,67 +247,6 @@ struct _session_token {
  *
  * Side Effect:
  */
-
-static void encrypt_outgoing(
-    void *input,
-    void *output, /* can overlap with input */
-    size_t message_size,
-    uint8_t key_bytes[16],
-    uint8_t iv_bytes[16] /* [in|out] */) {
-
-    assert(message_size % 16 == 0); // sanity (not a generic function)
-    if (message_size == 0) { return; }
-
-    AES_KEY key;
-    AES_set_encrypt_key(key_bytes, 128, &key);
-
-    void *output_tmp = malloc(message_size);
-    AES_cbc_encrypt(
-        input,
-        output_tmp,
-        message_size,
-        &key,
-        iv_bytes,
-        AES_ENCRYPT);
-
-    memcpy(output, output_tmp, message_size);
-    memcpy(iv_bytes, &output[message_size-16], 16);
-    free(output_tmp);
-}
-
-static void decrypt_incoming(
-    void *input,
-    void *output, /* can overlap with input */
-    size_t message_size,
-    uint8_t key_bytes[16],
-    uint8_t iv_bytes[16] /* [in|out] */) {
-
-    assert(message_size % 16 == 0); // sanity (not a generic function)
-    if (message_size == 0) { return; }
-
-    uint8_t next_iv[16];
-    memcpy(next_iv, &input[message_size-16], 16);
-
-    AES_KEY key;
-    AES_set_decrypt_key(key_bytes, 128, &key);
-
-    void *output_tmp = malloc(message_size);
-    AES_cbc_encrypt(
-        input,
-        output_tmp,
-        message_size,
-        &key,
-        iv_bytes,
-        AES_DECRYPT);
-
-    memcpy(output, output_tmp, message_size);
-    memcpy(iv_bytes, next_iv, 16);
-    free(output_tmp);
-}
-
-
-
-
 int do_control_setup_server(int s, void *context) {
 
     struct _server_test_params *test_context
@@ -283,6 +309,7 @@ int do_control_setup_server(int s, void *context) {
     struct _session_token clear_session_token;
     assert(sizeof clear_session_token == sizeof setup_response.Token); // config sanity
 
+    // decrypt the token
     AES_KEY tk;
     AES_set_decrypt_key(dk, 8 * sizeof(dk), &tk);
     uint8_t iv[16];
@@ -292,6 +319,12 @@ int do_control_setup_server(int s, void *context) {
         (void *) &clear_session_token,
         sizeof setup_response.Token,
         &tk, iv, AES_DECRYPT);
+
+    if (memcmp(clear_session_token.challenge, GREETING_CHALLENGE, sizeof clear_session_token.challenge)) {
+        printf("failed to validate challenge in decrypted token\n");
+        goto cleanup;
+    }
+
 
     // nothing to check in the other fields in unauthenticated mode
     test_context->output.setup_response_ok = 1;
@@ -421,15 +454,6 @@ cleanup:
 
     HMAC_CTX_cleanup(&send_hmac_ctx);
     HMAC_CTX_cleanup(&receive_hmac_ctx);
-
-#if 0
-    if (hmac_send_ctx) {
-        I2HMACSha1Free(hmac_send_ctx);
-    }
-    if (hmac_recv_ctx) {
-        I2HMACSha1Free(hmac_recv_ctx);
-    }
-#endif
 
     return 0;
 }
