@@ -15,6 +15,7 @@ typedef OWPControl (*XWPControlOpen)(
 
 int session_setup_test(
         char **argv,
+        uint32_t client_mode_mask,
         uint32_t num_packets,
         uint32_t num_slots,
         struct _server_test_params *test_params,

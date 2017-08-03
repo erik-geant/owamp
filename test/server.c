@@ -265,7 +265,7 @@ int do_control_setup_server(int s, void *context) {
  
     struct _greeting greeting;
     memset(&greeting, 0, sizeof greeting);
-    greeting.Modes = htonl(7);
+    greeting.Modes = htonl(OWP_MODE_ENCRYPTED|OWP_MODE_AUTHENTICATED|OWP_MODE_OPEN);
     memcpy(greeting.Challenge, GREETING_CHALLENGE, sizeof greeting.Challenge);
     memcpy(greeting.Salt, GREETING_SALT, sizeof greeting.Salt);
     greeting.Count = htonl(GREETING_COUNT);

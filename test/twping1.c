@@ -25,7 +25,7 @@
 /*
  * Function:        main
  *
- * Description:     launch a simulated owamp server & send commands
+ * Description:     launch a simulated twamp server & send commands
  *                  so they can be validated in do_control_setup_server
  *
  * In Args:         argc, argv (unused)
@@ -48,11 +48,12 @@ main(
     test_params.input.expected_modes = OWP_MODE_ENCRYPTED;
     test_params.input.expected_num_test_slots = 0;
     test_params.input.expected_num_test_packets = 0; 
-    assert(sizeof test_params.input.sid <= sizeof SID_VALUE); // configu sanity
+    assert(sizeof test_params.input.sid <= sizeof SID_VALUE); // configuration sanity
     memcpy(test_params.input.sid, SID_VALUE, sizeof test_params.input.sid);
 
     if (session_setup_test(
             argv,
+            OWP_MODE_ENCRYPTED,
             NUM_TEST_PACKETS,
             NUM_TEST_SLOTS,
             &test_params,

@@ -100,6 +100,7 @@ void *server_proc(void *context) {
 */
 int session_setup_test(
         char **argv,
+        uint32_t client_mode_mask,
         uint32_t num_test_packets,
         uint32_t num_test_slots,
         struct _server_test_params *test_params,
@@ -181,11 +182,11 @@ int session_setup_test(
     // open the control connection
     serverAddr = I2AddrBySockFD(ctx->eh, fd, False);
     OWPErrSeverity owp_severity;
-    cntrl = TWPControlOpen(
+    cntrl = control_open(
             ctx,
             NULL,
             serverAddr,
-            OWP_MODE_ENCRYPTED,
+            client_mode_mask,
             SESSION_USERID,
             NULL, &owp_severity);
 
@@ -220,6 +221,9 @@ int session_setup_test(
                 sid_ret, &err_ret)) {
         goto cleanup;
     }
+
+    memcmp(
+
 
     client_successful = 1;
 
