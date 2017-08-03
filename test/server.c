@@ -1,5 +1,5 @@
 /*
- *        File:         test_protocol.c
+ *        File:         server.c
  *
  *        Author:       Erik Reid
  *                      GÉANT
@@ -16,7 +16,7 @@
 
 #include <owamp/owamp.h>
 #
-#include "./test_protocol.h"
+#include "./server.h"
 
 //#include <I2util/util.h>
 #include <I2util/hmac-sha1.h>

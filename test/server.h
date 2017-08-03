@@ -1,5 +1,5 @@
 /*
- *        File:         test_protocol.h
+ *        File:         server.h
  *
  *        Author:       Erik Reid
  *                      GÉANT

@@ -24,7 +24,7 @@
 #include <I2util/addr.h>
 
 #include "./owtest_utils.h"
-#include "./test_protocol.h"
+#include "./server.h"
 
 
 #define TMP_SOCK_FILENAME_TPL "twsock.XXXXXX"
