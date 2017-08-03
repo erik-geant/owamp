@@ -24,16 +24,29 @@
 #include <I2util/addr.h>
 
 #include "./owtest_utils.h"
-#include "./test_protocol.h"
+#include "./server.h"
 
 
 #define TMP_SOCK_FILENAME_TPL "twsock.XXXXXX"
-#define SERVER_TEST_IV "this is the IV!!"
 #define NUM_TEST_SLOTS 15
 #define NUM_TEST_PACKETS 18
 #define SID_VALUE "this is the SID!"
 
-
+OWPBoolean passphrase_callback(
+        OWPContext      ctx __attribute__((unused)),
+        const OWPUserID userid    __attribute__((unused)),
+        uint8_t         **pf,
+        size_t          *pf_len,
+        void            **pf_free,
+        OWPErrSeverity  *err_ret __attribute__((unused))
+        )
+{
+    static char *passphrase = SESSION_PASSPHRASE;
+    *pf = (uint8_t *) passphrase;
+    *pf_len = strlen(passphrase);
+    *pf_free = NULL;
+    return True;
+}
 
 /*
  * Function:        server_proc 
@@ -87,12 +100,10 @@ main(
 
     memset(&tspec, 0, sizeof tspec);
     memset(&test_params, 0, sizeof test_params);
-    test_params.input.expected_modes = OWP_MODE_OPEN;
+    test_params.input.expected_modes = OWP_MODE_ENCRYPTED;
     test_params.input.expected_num_test_slots = 0;
     test_params.input.expected_num_test_packets = 0; 
-    assert(sizeof test_params.input.server_iv <= sizeof SERVER_TEST_IV); // config sanity
     assert(sizeof test_params.input.sid <= sizeof SID_VALUE); // configu sanity
-    memcpy(test_params.input.server_iv, SERVER_TEST_IV, sizeof test_params.input.server_iv);
     memcpy(test_params.input.sid, SID_VALUE, sizeof test_params.input.sid);
     server_params.client_proc = do_control_setup_server;
     server_params.test_context = &test_params;
@@ -141,22 +152,35 @@ main(
     }
 
 
-    // open the control connection
+
     ctx = tmpContext(argv);
+
+    // install the passphrase callback
+    if (!OWPContextConfigSetF(
+            ctx,
+            OWPGetPF,
+            (OWPFunc) passphrase_callback)) {
+        printf("OWPContextConfigSetF failed!");
+        goto cleanup;
+    }
+
+
+
+    // open the control connection
     serverAddr = I2AddrBySockFD(ctx->eh, fd, False);
     OWPErrSeverity owp_severity;
-    cntrl = TWPControlOpen(ctx, NULL, serverAddr, OWP_MODE_OPEN, NULL, NULL, &owp_severity);
+    cntrl = TWPControlOpen(
+            ctx,
+            NULL,
+            serverAddr,
+            OWP_MODE_ENCRYPTED,
+            SESSION_USERID,
+            NULL, &owp_severity);
 
     if (!cntrl) {
         printf("OWPControlOpen error\n");
         goto cleanup;
     }
-
-    if (memcmp(cntrl->readIV, SERVER_TEST_IV, 16)) {
-        printf("incorrect server iv received");
-        goto cleanup;
-    }
-
 
     OWPTimeStamp curr_time;
     OWPGetTimeOfDay(ctx, &curr_time);

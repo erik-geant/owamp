@@ -1,5 +1,5 @@
 /*
- *        File:         test_protocol.h
+ *        File:         server.h
  *
  *        Author:       Erik Reid
  *                      GÉANT
@@ -7,12 +7,14 @@
  *        Description:  Declaration for owping control server handler
  */
 
+#define SESSION_USERID "bogus userid"
+#define SESSION_PASSPHRASE "this is the passphrase"
+
 struct _server_test_params {
     struct {
         uint32_t expected_modes;
         uint32_t expected_num_test_slots;
         uint32_t expected_num_test_packets;    
-        uint8_t server_iv[16];
         uint8_t sid[16];
     } input;
     struct {
