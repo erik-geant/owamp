@@ -7,7 +7,6 @@
  *        Description:  Utilities for launching a *wping client
  *                      and setting up a control session
  */
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -27,27 +26,44 @@
 #include "./owtest_utils.h"
 #include "./server.h"
 
+#define DEFAULT_PPCB_DEFINED
+#include "./session_setup.h"
+
 
 #define TMP_SOCK_FILENAME_TPL "twsock.XXXXXX"
-#define NUM_TEST_SLOTS 15
-#define NUM_TEST_PACKETS 18
-#define SID_VALUE "this is the SID!"
 
-OWPBoolean default_passphrase_callback(
+
+/*
+ * Function:        passphrase_callback_impl 
+ *
+ * Description:     default passphrase callback that returns the same
+ *                  passphrase used by the server emulator
+ *
+ * In Args:         cf. OWPGetPFFunc
+ *
+ * Out Args:
+ *
+ * Scope:
+ * Returns:         True
+ * Side Effect:
+ */
+static OWPBoolean passphrase_callback_impl(
         OWPContext      ctx __attribute__((unused)),
         const OWPUserID userid    __attribute__((unused)),
         uint8_t         **pf,
         size_t          *pf_len,
         void            **pf_free,
         OWPErrSeverity  *err_ret __attribute__((unused))
-        )
-{
+        ) {
     static char *passphrase = SESSION_PASSPHRASE;
     *pf = (uint8_t *) passphrase;
     *pf_len = strlen(passphrase);
     *pf_free = NULL;
     return True;
 }
+
+OWPGetPFFunc default_passphrase_callback = passphrase_callback_impl;
+
 
 /*
  * Function:        server_proc 
@@ -81,14 +97,14 @@ void *server_proc(void *context) {
  * Scope:           unit test (run using make check)
  * Returns:         non-zero in case of error
  * Side Effect:
- */
+*/
 int session_setup_test(
         char **argv,
-        uint32_t num_packets,
-        uint32_t num_slots,
+        uint32_t num_test_packets,
+        uint32_t num_test_slots,
         struct _server_test_params *test_params,
         XWPControlOpen control_open,
-        PPCB password_callback) {
+        OWPGetPFFunc passphrase_callback) {
 
     int client_successful = 0;
     pthread_t server_thread;
@@ -101,7 +117,7 @@ int session_setup_test(
     struct _server_params server_params;
 
     server_params.client_proc = do_control_setup_server;
-    server_params.test_context = &test_params;
+    server_params.test_context = test_params;
 
     memset(&tspec, 0, sizeof tspec);
 
@@ -184,11 +200,11 @@ int session_setup_test(
     tspec.loss_timeout = OWPDoubleToNum64(0.0);
     tspec.typeP = 0; 
     tspec.packet_size_padding = 0;
-    tspec.npackets = NUM_TEST_PACKETS;
-    tspec.nslots = NUM_TEST_SLOTS;
-    tspec.slots = (OWPSlot *) calloc(NUM_TEST_SLOTS, sizeof(OWPSlot));
-    memset(tspec.slots, 0, NUM_TEST_SLOTS * sizeof(OWPSlot));
-    for(int i=0; i<NUM_TEST_SLOTS; i++) {
+    tspec.npackets = num_test_packets;
+    tspec.nslots = num_test_slots;
+    tspec.slots = (OWPSlot *) calloc(num_test_slots, sizeof(OWPSlot));
+    memset(tspec.slots, 0, num_test_slots * sizeof(OWPSlot));
+    for(int i=0; i<num_test_slots; i++) {
         tspec.slots[i].slot_type = OWPSlotLiteralType;
         tspec.slots[i].literal.offset = OWPDoubleToNum64((double) i);
     }
@@ -211,7 +227,7 @@ cleanup:
 
     if (thread_valid) {
         // possible, but unlikely race condition
-        if (test_params.output.test_complete) {
+        if (test_params->output.test_complete) {
             pthread_join(server_thread, NULL);
         } else {
             pthread_cancel(server_thread);
@@ -237,12 +253,6 @@ cleanup:
         free(tspec.slots);
     }
 
-    int exit_code = !client_successful
-        || !test_params.output.sent_greeting
-        || !test_params.output.setup_response_ok
-        || !test_params.output.sent_server_start
-        || !test_params.output.sent_accept_session
-        || !test_params.output.test_complete;
-    exit(exit_code);
+    return !client_successful;
 }
 
