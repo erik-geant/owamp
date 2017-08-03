@@ -21,7 +21,7 @@
 INCLUDES	= $(OWPINCS) $(I2UTILINCS)
 AM_CFLAGS	= $(OWP_PREFIX_CFLAGS)
 
-check_PROGRAMS  = owtvec owstats owping_clear owe2e twping_enc
+check_PROGRAMS  = owtvec owstats owping_enc owping_clear owe2e twping_enc twping_clear
 TESTS           = $(check_PROGRAMS)
 
 owtvec_SOURCES	= owtvec.c
@@ -36,6 +36,10 @@ owping_clear_SOURCES   = owping_clear.c owtest_utils.c server.c session_setup.c
 owping_clear_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
 owping_clear_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
+owping_enc_SOURCES   = owping_enc.c owtest_utils.c server.c session_setup.c
+owping_enc_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
+owping_enc_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
+
 owe2e_SOURCES   = owe2e.c owtest_utils.c
 owe2e_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
 owe2e_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
@@ -43,3 +47,7 @@ owe2e_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 twping_enc_SOURCES   = twping_enc.c owtest_utils.c server.c session_setup.c
 twping_enc_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
 twping_enc_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
+
+twping_clear_SOURCES   = twping_clear.c owtest_utils.c server.c session_setup.c
+twping_clear_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
+twping_clear_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
