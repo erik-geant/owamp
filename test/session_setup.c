@@ -222,8 +222,10 @@ int session_setup_test(
         goto cleanup;
     }
 
-    memcmp(
-
+    if (memcmp(sid_ret, test_params->input.sid, sizeof(OWPSID))) {
+        printf("received incorrect SID\n");
+        goto cleanup;
+    }
 
     client_successful = 1;
 
