@@ -15,7 +15,7 @@ struct _server_test_params {
         uint32_t expected_modes;
         uint32_t expected_num_test_slots;
         uint32_t expected_num_test_packets;    
-        uint8_t sid[16];
+        OWPSID sid;
     } input;
     struct {
         int sent_greeting;
