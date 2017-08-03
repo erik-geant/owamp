@@ -120,7 +120,7 @@ struct _request_session {
 struct _schedule_slot_description {
     uint8_t slot_type;
     uint8_t MBZ[7];
-    uint32_t SlotParameter;
+    uint64_t SlotParameter;
 };
 
 // hmac sent following a sequence of schedule
