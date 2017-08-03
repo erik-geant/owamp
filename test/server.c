@@ -376,10 +376,13 @@ int do_control_setup_server(int s, void *context) {
         decrypt_incoming(&request_session, &request_session, sizeof request_session,
                 clear_session_token.aes_session_key, dec_session_iv);
     }
+
     HMAC_Update(&receive_hmac_ctx, (unsigned char *) &request_session, (sizeof request_session) - 16);
     hmac_len = sizeof expected_hmac;
     HMAC_Final(&receive_hmac_ctx, expected_hmac, &hmac_len);
     assert(hmac_len == 20);
+    HMAC_Init_ex(&receive_hmac_ctx, NULL, 0, NULL, NULL);
+
     if (mode & (OWP_MODE_ENCRYPTED|OWP_MODE_AUTHENTICATED)) {
         if (memcmp(expected_hmac, request_session.HMAC, 16)) {
             printf("hmac verification error in Request-Session\n");
@@ -415,11 +418,11 @@ int do_control_setup_server(int s, void *context) {
                     clear_session_token.aes_session_key, dec_session_iv);
         }
 
-        HMAC_Init_ex(&receive_hmac_ctx, NULL, 0, NULL, NULL);
         HMAC_Update(&receive_hmac_ctx, (unsigned char *) slots, slots_num_bytes);
         hmac_len = sizeof expected_hmac;
         HMAC_Final(&receive_hmac_ctx, expected_hmac, &hmac_len);
         assert(hmac_len == 20);
+        HMAC_Init_ex(&receive_hmac_ctx, NULL, 0, NULL, NULL);
 
         struct _hmac hmac;
         if (recv(s, &hmac, sizeof hmac, MSG_WAITALL) != sizeof hmac) {
