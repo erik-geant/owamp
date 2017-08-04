@@ -7,5 +7,5 @@
  *        Description:  end-to-end process utililities
  */
 
-int e2e_test(void);
+int e2e_test(const char *authmode);
 

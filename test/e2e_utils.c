@@ -29,8 +29,8 @@
 #define NUM_TEST_PACKETS 10
 
 #define XWAMPD_CONF_FILENAME "owamp-server.conf"
-#define XWAMPD_LIMITS_FILENAME "owampd.limits"
-#define XWAMPD_PFS_FILENAME "owampd.pfs"
+#define XWAMPD_LIMITS_FILENAME "owampd-server.limits"
+#define XWAMPD_PFS_FILENAME "owampd-server.pfs"
 
 const char USERID[] = "fake-user";
 const char PASSPHRASE[] = "super secret passphrase";
@@ -142,7 +142,7 @@ int launch_owampd(uint16_t port, char *config_dir, size_t config_dir_size, pid_t
  * Returns:         read FILE ptr opened on the subprocess's stdout
  * Side Effect:     an owping process is started
  */
-FILE *launch_owping(uint16_t port, char *authmode, char *config_dir, pid_t *child_pid) {
+FILE *launch_owping(uint16_t port, const char *authmode, const char *config_dir, pid_t *child_pid) {
    
     int pipefd[2];
     pipe(pipefd);
@@ -168,13 +168,18 @@ FILE *launch_owping(uint16_t port, char *authmode, char *config_dir, pid_t *chil
         snprintf(num_packets, sizeof num_packets, "%d", NUM_TEST_PACKETS);
         char *argv[] = {
             "../owping/owping",
-            "-A", authmode,
+            "-c", num_packets,
+            "-A", (char *) authmode,
             "-u", (char *) USERID,
             "-k", pfs_filename,
-            "-c", num_packets,
             address,
             NULL,
         };
+
+        if (!strstr(authmode, "A") && !strstr(authmode, "E")) {
+            argv[3] = address;
+            argv[4] = NULL;
+        }
         if (execvp(*argv, argv) < 0) {
             perror("execvp error launching owping");
             exit(1);
@@ -185,7 +190,7 @@ FILE *launch_owping(uint16_t port, char *authmode, char *config_dir, pid_t *chil
     return fdopen(pipefd[0], "r");
 }
 
-int create_config_dir(uint16_t *port, char *config_dir, size_t buffer_size) {
+int create_config_dir(const char *authmode, uint16_t *port, char *config_dir, size_t buffer_size) {
 
     if (buffer_size <= strlen(TMPNAME_FMT)) {
         fprintf(stderr, "dir_name buffer too small, need %lu bytes\n", strlen(TMPNAME_FMT) + 1);
@@ -227,19 +232,20 @@ int create_config_dir(uint16_t *port, char *config_dir, size_t buffer_size) {
     fprintf(f, "assign default regular\n");
     fclose(f);
 
+    if (strstr(authmode, "A") || strstr(authmode, "E")) {
+        sprintf(filename, "%s/%s", config_dir, XWAMPD_PFS_FILENAME);
+        f = fopen(filename, "w");
+        if (!f) {
+            perror("fopen error");
+            return 1;
+        }
 
-    sprintf(filename, "%s/%s", config_dir, XWAMPD_PFS_FILENAME);
-    f = fopen(filename, "w");
-    if (!f) {
-        perror("fopen error");
-        return 1;
+        char *hex_passphrase = (char *) malloc(2*strlen(PASSPHRASE) + 1);
+        I2HexEncode(hex_passphrase, (const uint8_t *)PASSPHRASE, strlen(PASSPHRASE));
+        fprintf(f, "%s %s\n", USERID, hex_passphrase);
+        free(hex_passphrase);
+        fclose(f);
     }
-
-    char *hex_passphrase = (char *) malloc(2*strlen(PASSPHRASE) + 1);
-    I2HexEncode(hex_passphrase, (const uint8_t *)PASSPHRASE, strlen(PASSPHRASE));
-    fprintf(f, "%s %s\n", USERID, hex_passphrase);
-    free(hex_passphrase);
-    fclose(f);
 
     return 0;
 }
@@ -259,16 +265,15 @@ int create_config_dir(uint16_t *port, char *config_dir, size_t buffer_size) {
  * Returns:         non-zero in case of error
  * Side Effect:
  */
-int e2e_test(void) {
-    uint16_t port;
-    char config_dir_name[PATH_MAX];
+int e2e_test(const char *authmode) {
 
     int exit_code = 1;
+    uint16_t port;
+    char config_dir_name[PATH_MAX];
     pid_t server_pid = -1, ping_pid = -1;
     FILE *owping = NULL;
 
-
-    if(create_config_dir(&port, config_dir_name, sizeof(config_dir_name))) {
+    if(create_config_dir(authmode, &port, config_dir_name, sizeof(config_dir_name))) {
         printf("error initializing test config\n");
         goto cleanup;
     }
@@ -279,7 +284,7 @@ int e2e_test(void) {
 
     sleep(3); // give server time to startup
 
-    if(!(owping = launch_owping(port, "O", config_dir_name, &ping_pid))) {
+    if(!(owping = launch_owping(port, authmode, config_dir_name, &ping_pid))) {
         goto cleanup;
     }
 

@@ -28,7 +28,7 @@ main(
         char    **argv
     ) {
 
-    return e2e_test();
+    return e2e_test("E");
 
 }
 
