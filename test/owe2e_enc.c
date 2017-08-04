@@ -1,18 +1,18 @@
 /*
- *        File:         owe2e.c
+ *        File:         owe2e_enc.c
  *
  *        Author:       Erik Reid
  *                      GÉANT
  *
- *        Description:  Basic twping client control setup test in clear mode
+ *        Description:  Basic twping client control setup test in encrypted mode
  */
 #include "./e2e_utils.h"
 
 /*
  * Function:        main
  *
- * Description:     launch a simulated twamp server & send commands
- *                  so they can be validated in do_control_setup_server
+ * Description:     launch owping and owampd child processes
+ *                  perform a measurement and validate the output
  *
  * In Args:         argc, argv (unused)
  *

@@ -21,7 +21,7 @@
 INCLUDES	= $(OWPINCS) $(I2UTILINCS)
 AM_CFLAGS	= $(OWP_PREFIX_CFLAGS)
 
-check_PROGRAMS  = owtvec owstats owping_enc owping_clear owe2e twping_enc twping_clear
+check_PROGRAMS  = owtvec owstats owping_enc owping_clear owe2e_clear owe2e_auth owe2e_enc twping_enc twping_clear
 TESTS           = $(check_PROGRAMS)
 
 owtvec_SOURCES	= owtvec.c
@@ -40,9 +40,17 @@ owping_enc_SOURCES   = owping_enc.c owtest_utils.c server.c session_setup.c
 owping_enc_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
 owping_enc_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
-owe2e_SOURCES   = owe2e.c owtest_utils.c e2e_utils.c
-owe2e_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
-owe2e_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
+owe2e_clear_SOURCES   = owe2e_clear.c owtest_utils.c e2e_utils.c
+owe2e_clear_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
+owe2e_clear_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
+
+owe2e_auth_SOURCES   = owe2e_auth.c owtest_utils.c e2e_utils.c
+owe2e_auth_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
+owe2e_auth_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
+
+owe2e_enc_SOURCES   = owe2e_enc.c owtest_utils.c e2e_utils.c
+owe2e_enc_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
+owe2e_enc_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
 twping_enc_SOURCES   = twping_enc.c owtest_utils.c server.c session_setup.c
 twping_enc_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
