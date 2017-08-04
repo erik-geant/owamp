@@ -40,7 +40,7 @@ owping_enc_SOURCES   = owping_enc.c owtest_utils.c server.c session_setup.c
 owping_enc_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread -lcrypto
 owping_enc_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
-owe2e_SOURCES   = owe2e.c owtest_utils.c
+owe2e_SOURCES   = owe2e.c owtest_utils.c e2e_utils.c
 owe2e_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
 owe2e_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
