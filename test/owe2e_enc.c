@@ -28,7 +28,7 @@ main(
         char    **argv
     ) {
 
-    return e2e_test("E");
+    return e2e_test(OWAMP, "E");
 
 }
 

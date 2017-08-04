@@ -7,5 +7,6 @@
  *        Description:  end-to-end process utililities
  */
 
-int e2e_test(const char *authmode);
 
+typedef enum _protocol {OWAMP, TWAMP} PROTOCOL;
+int e2e_test(PROTOCOL protocol, const char *authmode);
