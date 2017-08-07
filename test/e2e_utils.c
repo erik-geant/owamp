@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <signal.h>
 
 #include <owamp/owamp.h>
@@ -300,7 +301,23 @@ int create_config_dir(
  * Returns:         non-zero in case of error
  * Side Effect:
  */
-int e2e_test(PROTOCOL protocol, const char *authmode) {
+typedef int(*output_verification_handler)(const char *);
+
+int verify_owping_output(const char *output) {
+    // status_str should appear in the output twice
+    char status_str[20];
+    snprintf(status_str, sizeof status_str, "%d sent, 0 lost", NUM_TEST_PACKETS);
+    return count_occurrences(output, status_str) != 2;
+}
+
+int verify_twping_output(const char *output) {
+    // status_str should appear in the output once
+    char status_str[20];
+    snprintf(status_str, sizeof status_str, "%d sent, 0 lost", NUM_TEST_PACKETS);
+    return count_occurrences(output, status_str) != 1;
+}
+
+int e2e_test(PROTOCOL protocol, const char *authmode, output_verification_handler verify_output) {
 
     int exit_code = 1;
     uint16_t port;
@@ -331,20 +348,12 @@ int e2e_test(PROTOCOL protocol, const char *authmode) {
 
         ping_pid = -1; // i.e. don't kill below
 
-        char output[1024];
-        int len = fread(output, 1, sizeof output, xwping_stdout);
-        output[len] = '\0';
-
-        printf("%s OUTPUT:\n%s\n", protocol == OWAMP ? "owping" : "twping", output);
-
         if (!status) {
-            // status_str should appear in the output twice
-            char status_str[20];
-            snprintf(status_str, sizeof status_str, "%d sent, 0 lost", NUM_TEST_PACKETS);
-
-            if (count_occurrences(output, status_str) == 2) {
-                exit_code = 0; // succeeded
-            }
+            char output[1024];
+            int len = fread(output, 1, sizeof output, xwping_stdout);
+            output[len] = '\0';
+            printf("%s OUTPUT:\n%s\n", protocol == OWAMP ? "owping" : "twping", output);
+            exit_code = verify_output(output);
         }
     }
 

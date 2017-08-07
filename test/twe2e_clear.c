@@ -28,8 +28,7 @@ main(
         char    **argv
     ) {
 
-    return e2e_test(TWAMP, "O");
-
+    return e2e_test(TWAMP, "O", verify_twping_output);
 }
 
 
