@@ -27,3 +27,8 @@ twping_enc:
          messages to a simiulated server, which validates them
          and then returns appropriate responses
 
+twe2e_clear:
+twe2e_auth:
+twe2e_enc:
+         launch twping/twampd child processes and capture
+         the test output - verify there were no errors
