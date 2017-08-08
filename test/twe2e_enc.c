@@ -1,5 +1,5 @@
 /*
- *        File:         owe2e_enc.c
+ *        File:         twe2e_enc.c
  *
  *        Author:       Erik Reid
  *                      GÉANT
@@ -28,8 +28,7 @@ main(
         char    **argv
     ) {
 
-    return e2e_test(OWAMP, "E", verify_owping_output);
-
+    return e2e_test(TWAMP, "E", verify_twping_output);
 }
 
 

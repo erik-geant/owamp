@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <signal.h>
 
 #include <owamp/owamp.h>
@@ -25,12 +26,18 @@
 #include <I2util/addr.h>
 
 #include "./owtest_utils.h"
+#include "./e2e_utils.h"
 
 #define NUM_TEST_PACKETS 10
 
-#define XWAMPD_CONF_FILENAME "owamp-server.conf"
-#define XWAMPD_LIMITS_FILENAME "owampd-server.limits"
-#define XWAMPD_PFS_FILENAME "owampd-server.pfs"
+#define OWAMPD_CONF_FILENAME "owamp-server.conf"
+#define OWAMPD_LIMITS_FILENAME "owampd-server.limits"
+#define OWAMPD_PFS_FILENAME "owampd-server.pfs"
+
+#define TWAMPD_CONF_FILENAME "twamp-server.conf"
+#define TWAMPD_LIMITS_FILENAME "twampd-server.limits"
+#define TWAMPD_PFS_FILENAME "twampd-server.pfs"
+
 
 const char USERID[] = "fake-user";
 const char PASSPHRASE[] = "super secret passphrase";
@@ -88,21 +95,23 @@ cleanup:
 }
 
 /*
- * Function:        launch_owampd
+ * Function:        launch_xwampd
  *
- * Description:     launch owampd and listen on localhost:port
+ * Description:     launch owampd or twampd and listen on localhost:port
  *
- * In Args:         owampd control port
+ * In Args:         protocol type (i.e. OWAMP or TWAMP), server control port
  *
- * Out Args:        created temporary directory for config files
- *                  pid of owping process
+ * Out Args:        pid of server process
  *
  * Scope:
  * Returns:         non-zero in case of error
- * Side Effect:     an owampd process is started and tmp directory
- *                  is created that should be deleted
+ * Side Effect:     a server process is started
  */
-int launch_owampd(uint16_t port, char *config_dir, size_t config_dir_size, pid_t *child_pid) {
+int launch_xwampd(
+        PROTOCOL protocol,
+        uint16_t port,
+        char *config_dir,
+        pid_t *child_pid) {
 
     if((*child_pid = fork()) < 0) {
         perror("fork error");
@@ -112,7 +121,7 @@ int launch_owampd(uint16_t port, char *config_dir, size_t config_dir_size, pid_t
     if (*child_pid == 0) {
         // this is the child process
         char *argv[] = {
-            "../owampd/owampd",
+            protocol == OWAMP ? "../owampd/owampd" : "../owampd/twampd",
             "-c", config_dir,
             "-R", config_dir,
             "-v",
@@ -120,7 +129,7 @@ int launch_owampd(uint16_t port, char *config_dir, size_t config_dir_size, pid_t
             NULL,
         };
         if (execvp(*argv, argv) < 0) {
-            perror("execvp error launching owampd");
+            perror("execvp error launching server");
             exit(1);
         }
     }
@@ -129,20 +138,20 @@ int launch_owampd(uint16_t port, char *config_dir, size_t config_dir_size, pid_t
 }
 
 /*
- * Function:        launch_owping 
+ * Function:        launch_xwping 
  *
- * Description:     launch owping and point it at localhost:port
+ * Description:     launch owping or twping and point it at localhost:port
  *
- * In Args:         owampd control port, authmode (combination of AEO),
- *                  config path (not relevant for open mode)
+ * In Args:         protocol type (i.e. OWAMP or TWAMP), server control port,
+ *                  authmode (combination of AEO), config path (not relevant for open mode)
  *
- * Out Args:        pid of owping process
+ * Out Args:        pid of owping/twping process
  *
  * Scope:
  * Returns:         read FILE ptr opened on the subprocess's stdout
- * Side Effect:     an owping process is started
+ * Side Effect:     an child process is started
  */
-FILE *launch_owping(uint16_t port, const char *authmode, const char *config_dir, pid_t *child_pid) {
+FILE *launch_xwping(PROTOCOL protocol, uint16_t port, const char *authmode, const char *config_dir, pid_t *child_pid) {
    
     int pipefd[2];
     pipe(pipefd);
@@ -162,12 +171,14 @@ FILE *launch_owping(uint16_t port, const char *authmode, const char *config_dir,
         sprintf(address, "localhost:%d", port);
  
         char pfs_filename[PATH_MAX];
-        sprintf(pfs_filename, "%s/%s", config_dir, XWAMPD_PFS_FILENAME);
+        sprintf(pfs_filename, "%s/%s",
+            config_dir,
+            protocol == OWAMP ? OWAMPD_PFS_FILENAME : TWAMPD_PFS_FILENAME);
  
         char num_packets[6] = {0};
         snprintf(num_packets, sizeof num_packets, "%d", NUM_TEST_PACKETS);
         char *argv[] = {
-            "../owping/owping",
+            protocol == OWAMP ? "../owping/owping" : "../owping/twping",
             "-c", num_packets,
             "-A", (char *) authmode,
             "-u", (char *) USERID,
@@ -181,7 +192,7 @@ FILE *launch_owping(uint16_t port, const char *authmode, const char *config_dir,
             argv[4] = NULL;
         }
         if (execvp(*argv, argv) < 0) {
-            perror("execvp error launching owping");
+            perror("execvp error launching ping process");
             exit(1);
         }
     }
@@ -190,7 +201,26 @@ FILE *launch_owping(uint16_t port, const char *authmode, const char *config_dir,
     return fdopen(pipefd[0], "r");
 }
 
-int create_config_dir(const char *authmode, uint16_t *port, char *config_dir, size_t buffer_size) {
+/*
+ * Function:        create_config_dir
+ *
+ * Description:     create an populate a configuration directory that can be
+ *                  used by owampd or twampd (as indicated by protocol)
+ *
+ * In Args:         protocol, authmode
+ *
+ * Out Args:        available server port, new directory name, server process pid
+ *
+ * Scope:
+ * Returns:         non-zero in case of error
+ * Side Effect:     a temporary directory is created and should be deleted later
+ */
+int create_config_dir(
+        PROTOCOL protocol,
+        const char *authmode,
+        uint16_t *port,
+        char *config_dir,
+        size_t buffer_size) {
 
     if (buffer_size <= strlen(TMPNAME_FMT)) {
         fprintf(stderr, "dir_name buffer too small, need %lu bytes\n", strlen(TMPNAME_FMT) + 1);
@@ -201,7 +231,7 @@ int create_config_dir(const char *authmode, uint16_t *port, char *config_dir, si
         fprintf(stderr, "failed to find an available port\n");
         return 1;
     }
-    printf("found available port: %d, 0x%04x\n", *port, *port);
+    printf("available server port: %d, 0x%04x\n", *port, *port);
 
     strcpy(config_dir, TMPNAME_FMT);
     if(!mkdtemp(config_dir)) {
@@ -211,7 +241,9 @@ int create_config_dir(const char *authmode, uint16_t *port, char *config_dir, si
     printf("config directory: '%s'\n", config_dir);
 
     char filename[PATH_MAX];
-    sprintf(filename, "%s/%s", config_dir, XWAMPD_CONF_FILENAME);
+    sprintf(filename, "%s/%s",
+        config_dir,
+        protocol == OWAMP ? OWAMPD_CONF_FILENAME : TWAMPD_CONF_FILENAME);
     FILE *f = fopen(filename, "w");
     if (!f) {
         perror("fopen error");
@@ -221,7 +253,9 @@ int create_config_dir(const char *authmode, uint16_t *port, char *config_dir, si
     fclose(f);
 
 
-    sprintf(filename, "%s/%s", config_dir, XWAMPD_LIMITS_FILENAME);
+    sprintf(filename, "%s/%s",
+        config_dir,
+        protocol == OWAMP ? OWAMPD_LIMITS_FILENAME : TWAMPD_LIMITS_FILENAME);
     f = fopen(filename, "w");
     if (!f) {
         perror("fopen error");
@@ -233,7 +267,9 @@ int create_config_dir(const char *authmode, uint16_t *port, char *config_dir, si
     fclose(f);
 
     if (strstr(authmode, "A") || strstr(authmode, "E")) {
-        sprintf(filename, "%s/%s", config_dir, XWAMPD_PFS_FILENAME);
+        sprintf(filename, "%s/%s",
+            config_dir,
+            protocol == OWAMP ? OWAMPD_PFS_FILENAME : TWAMPD_PFS_FILENAME);
         f = fopen(filename, "w");
         if (!f) {
             perror("fopen error");
@@ -265,26 +301,42 @@ int create_config_dir(const char *authmode, uint16_t *port, char *config_dir, si
  * Returns:         non-zero in case of error
  * Side Effect:
  */
-int e2e_test(const char *authmode) {
+typedef int(*output_verification_handler)(const char *);
+
+int verify_owping_output(const char *output) {
+    // status_str should appear in the output twice
+    char status_str[20];
+    snprintf(status_str, sizeof status_str, "%d sent, 0 lost", NUM_TEST_PACKETS);
+    return count_occurrences(output, status_str) != 2;
+}
+
+int verify_twping_output(const char *output) {
+    // status_str should appear in the output once
+    char status_str[20];
+    snprintf(status_str, sizeof status_str, "%d sent, 0 lost", NUM_TEST_PACKETS);
+    return count_occurrences(output, status_str) != 1;
+}
+
+int e2e_test(PROTOCOL protocol, const char *authmode, output_verification_handler verify_output) {
 
     int exit_code = 1;
     uint16_t port;
     char config_dir_name[PATH_MAX];
     pid_t server_pid = -1, ping_pid = -1;
-    FILE *owping = NULL;
+    FILE *xwping_stdout = NULL;
 
-    if(create_config_dir(authmode, &port, config_dir_name, sizeof(config_dir_name))) {
+    if(create_config_dir(protocol, authmode, &port, config_dir_name, sizeof(config_dir_name))) {
         printf("error initializing test config\n");
         goto cleanup;
     }
 
-    if(launch_owampd(port, config_dir_name, sizeof config_dir_name, &server_pid)) {
+    if(launch_xwampd(protocol, port, config_dir_name, &server_pid)) {
         goto cleanup;
     }
 
     sleep(3); // give server time to startup
 
-    if(!(owping = launch_owping(port, authmode, config_dir_name, &ping_pid))) {
+    if(!(xwping_stdout = launch_xwping(protocol, port, authmode, config_dir_name, &ping_pid))) {
         goto cleanup;
     }
 
@@ -296,27 +348,19 @@ int e2e_test(const char *authmode) {
 
         ping_pid = -1; // i.e. don't kill below
 
-        char output[1024];
-        int len = fread(output, 1, sizeof output, owping);
-        output[len] = '\0';
-
-        printf("OWPING OUTPUT:\n%s\n", output);
-
         if (!status) {
-            // status_str should appear in the output twice
-            char status_str[20];
-            snprintf(status_str, sizeof status_str, "%d sent, 0 lost", NUM_TEST_PACKETS);
-
-            if (count_occurrences(output, status_str) == 2) {
-                exit_code = 0; // succeeded
-            }
+            char output[1024];
+            int len = fread(output, 1, sizeof output, xwping_stdout);
+            output[len] = '\0';
+            printf("%s OUTPUT:\n%s\n", protocol == OWAMP ? "owping" : "twping", output);
+            exit_code = verify_output(output);
         }
     }
 
 cleanup:
 
-    if (owping) {
-        fclose(owping);
+    if (xwping_stdout) {
+        fclose(xwping_stdout);
     }
     if (ping_pid > 0) {
         kill(ping_pid, SIGKILL);

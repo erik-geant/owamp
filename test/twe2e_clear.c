@@ -1,10 +1,10 @@
 /*
- *        File:         owe2e_enc.c
+ *        File:         twe2e_clear.c
  *
  *        Author:       Erik Reid
  *                      GÉANT
  *
- *        Description:  Basic twping client control setup test in encrypted mode
+ *        Description:  Basic twping client control setup test in clear mode
  */
 #include "./e2e_utils.h"
 
@@ -28,8 +28,7 @@ main(
         char    **argv
     ) {
 
-    return e2e_test(OWAMP, "E", verify_owping_output);
-
+    return e2e_test(TWAMP, "O", verify_twping_output);
 }
 
 
