@@ -173,7 +173,7 @@ FILE *launch_xwping(PROTOCOL protocol, uint16_t port, const char *authmode, cons
         char pfs_filename[PATH_MAX];
         sprintf(pfs_filename, "%s/%s",
             config_dir,
-            protocol == OWAMP ? OWAMPD_PFS_FILENAME : TWAMPD_CONF_FILENAME);
+            protocol == OWAMP ? OWAMPD_PFS_FILENAME : TWAMPD_PFS_FILENAME);
  
         char num_packets[6] = {0};
         snprintf(num_packets, sizeof num_packets, "%d", NUM_TEST_PACKETS);
