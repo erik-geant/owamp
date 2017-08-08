@@ -21,7 +21,7 @@
 INCLUDES	= $(OWPINCS) $(I2UTILINCS)
 AM_CFLAGS	= $(OWP_PREFIX_CFLAGS)
 
-check_PROGRAMS  = owtvec owstats owping_enc owping_clear owe2e_clear owe2e_auth owe2e_enc twping_enc twping_clear hmac twe2e_clear
+check_PROGRAMS  = owtvec owstats owping_enc owping_clear owe2e_clear owe2e_auth owe2e_enc twping_enc twping_clear hmac twe2e_clear twe2e_auth twe2e_enc
 TESTS           = $(check_PROGRAMS)
 
 owtvec_SOURCES	= owtvec.c
@@ -63,6 +63,14 @@ twping_clear_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 twe2e_clear_SOURCES   = twe2e_clear.c owtest_utils.c e2e_utils.c
 twe2e_clear_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
 twe2e_clear_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
+
+twe2e_auth_SOURCES   = twe2e_auth.c owtest_utils.c e2e_utils.c
+twe2e_auth_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
+twe2e_auth_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
+
+twe2e_enc_SOURCES   = twe2e_enc.c owtest_utils.c e2e_utils.c
+twe2e_enc_LDADD = $(OWPLIBS) -lI2util $(MALLOCDEBUGLIBS) -lpthread
+twe2e_enc_DEPENDENCIES = $(OWPLIBDEPS) $(I2UTILLIBDEPS)
 
 
 
